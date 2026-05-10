@@ -1,0 +1,136 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-crowd_auction}
+      POSTGRES_USER: ${POSTGRES_USER:-crowd}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crowd}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crowd} -d ${POSTGRES_DB:-crowd_auction}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    ports:
+      - "${ZOOKEEPER_PORT:-2181}:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    depends_on:
+      - zookeeper
+    ports:
+      - "${KAFKA_PORT:-9092}:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+  eureka-server:
+    build:
+      context: ./eureka-server
+    ports:
+      - "${EUREKA_PORT:-8761}:8761"
+    environment:
+      SERVER_PORT: 8761
+      SPRING_PROFILES_ACTIVE: docker
+
+  api-gateway:
+    build:
+      context: ./api-gateway
+    depends_on:
+      - eureka-server
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+    environment:
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: docker
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka
+
+  auth-service:
+    build:
+      context: ./authservice
+    depends_on:
+      - postgres
+      - kafka
+      - eureka-server
+    ports:
+      - "${AUTH_SERVICE_PORT:-8081}:8081"
+    environment:
+      SERVER_PORT: 8081
+      SPRING_PROFILES_ACTIVE: docker
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-crowd_auction}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-crowd}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-crowd}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+
+  bid-service:
+    build:
+      context: ./bidservice
+    depends_on:
+      - postgres
+      - kafka
+      - eureka-server
+    ports:
+      - "${BID_SERVICE_PORT:-8082}:8082"
+    environment:
+      SERVER_PORT: 8082
+      SPRING_PROFILES_ACTIVE: docker
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-crowd_auction}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-crowd}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-crowd}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+
+  item-service:
+    build:
+      context: ./itemservice
+    depends_on:
+      - postgres
+      - kafka
+      - eureka-server
+    ports:
+      - "${ITEM_SERVICE_PORT:-8083}:8083"
+    environment:
+      SERVER_PORT: 8083
+      SPRING_PROFILES_ACTIVE: docker
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-crowd_auction}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-crowd}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-crowd}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+
+  wallet-service:
+    build:
+      context: ./walletservice
+    depends_on:
+      - postgres
+      - kafka
+      - eureka-server
+    ports:
+      - "${WALLET_SERVICE_PORT:-8084}:8084"
+    environment:
+      SERVER_PORT: 8084
+      SPRING_PROFILES_ACTIVE: docker
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-crowd_auction}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-crowd}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-crowd}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+
+volumes:
+  postgres-data:
